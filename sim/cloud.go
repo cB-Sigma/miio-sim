@@ -25,9 +25,16 @@ import (
 type Cloud struct {
 	HTTP           *httptest.Server
 	User, Password string
-	// Verify asks for an e-mail check (notificationUrl) instead of
-	// signing in.
+	// Verify asks for an identity check (notificationUrl) at every
+	// sign-in; it is completed by asking for a code by e-mail or SMS and
+	// sending back Code (verify.go).
 	Verify bool
+	// Captcha asks for a captcha at sign-in until CaptchaText is sent
+	// with the "ick" cookie the captcha image set.
+	Captcha bool
+	// Code and CaptchaText are what the simulated person receives and
+	// reads ("246810" and "demo7" when empty).
+	Code, CaptchaText string
 	// Homes are the account's devices by region.
 	Devices map[string][]miio.CloudDevice
 
@@ -36,6 +43,11 @@ type Cloud struct {
 	token     string
 	logins    int
 	calls     []string
+	vctx      string   // the pending identity check's context
+	sent      []string // ways codes were sent ("email", "phone")
+	ick       string
+	verified  int
+	linked    map[string]*Device // devices reached through the account, by did
 }
 
 // StartCloud starts the simulated account.
@@ -74,7 +86,8 @@ func (c *Cloud) serve(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(v)
 		_, _ = w.Write(append([]byte("&&&START&&&"), b...))
 	}
-	q := r.URL.Query()
+	_ = r.ParseForm()
+	q := r.Form // the query and a form body alike
 	switch {
 	case r.URL.Path == "/pass/serviceLogin":
 		if q.Get("sid") != "xiaomiio" {
@@ -89,23 +102,39 @@ func (c *Cloud) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if q.Get("user") != c.User || q.Get("hash") != strings.ToUpper(hex.EncodeToString(sum[:])) {
-			start(map[string]any{"code": 70016, "desc": "wrong password"})
+			start(map[string]any{"code": 70016, "result": "error", "desc": "wrong password"})
 			return
 		}
+		if c.Captcha {
+			ick, _ := r.Cookie("ick")
+			given := q.Get("captCode")
+			if given == "" || ick == nil || ick.Value != c.ick || !strings.EqualFold(given, c.captchaText()) {
+				code := 87001
+				if given == "" {
+					code = 70016
+				}
+				start(map[string]any{"code": code, "captchaUrl": "/pass/getCode?icodeType=login"})
+				return
+			}
+		}
 		if c.Verify {
-			start(map[string]any{"code": 0, "notificationUrl": c.HTTP.URL + "/identity/authStart"})
+			c.vctx = base64.RawURLEncoding.EncodeToString(rnd(9))
+			c.sent = nil
+			start(map[string]any{"code": 0, "notificationUrl": c.HTTP.URL + "/identity/authStart?sid=xiaomiio&context=" + c.vctx})
 			return
 		}
 		c.ssecurity = base64.StdEncoding.EncodeToString(rnd(16))
-		start(map[string]any{"code": 0, "ssecurity": c.ssecurity, "userId": 1234567, "cUserId": "cu", "passToken": "pt",
+		start(map[string]any{"code": 0, "result": "ok", "ssecurity": c.ssecurity, "userId": 1234567, "cUserId": "cu", "passToken": "pt",
 			"location": c.HTTP.URL + "/sts?d=1&ticket=0"})
 	case r.URL.Path == "/sts":
 		c.token = base64.StdEncoding.EncodeToString(rnd(24))
 		c.logins++
 		http.SetCookie(w, &http.Cookie{Name: "serviceToken", Value: c.token, Path: "/"})
 		_, _ = w.Write([]byte("ok"))
-	case strings.Contains(r.URL.Path, "/app/v2/") && r.Method == http.MethodPost:
+	case strings.Contains(r.URL.Path, "/app/") && r.Method == http.MethodPost:
 		c.api(w, r)
+	case strings.HasPrefix(r.URL.Path, "/identity/") || r.URL.Path == "/pass/getCode" || r.URL.Path == "/pass/serviceLoginAuth2/end":
+		c.verifyStep(w, r, start)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -117,7 +146,8 @@ func (c *Cloud) api(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	q := r.URL.Query()
+	_ = r.ParseForm()
+	q := r.Form // the query and a form body alike
 	i := strings.Index(r.URL.Path, "/app/")
 	region := strings.Trim(r.URL.Path[:i], "/")
 	path := r.URL.Path[i+len("/app"):]
@@ -155,8 +185,11 @@ func (c *Cloud) api(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		res = map[string]any{"device_info": devs, "has_more": false}
+	case "/home/device_list":
+		// The older list some clients (micloud) use.
+		res = map[string]any{"list": devs}
 	default:
-		res = nil
+		res = c.relay(path, data)
 	}
 	out := map[string]any{"code": 0, "message": "ok", "result": res}
 	if res == nil {

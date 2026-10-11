@@ -49,8 +49,9 @@ func main() {
 const demoUser = "demo@example.invalid"
 
 type running struct {
-	demo  *sim.Demo
-	cloud *sim.Cloud
+	demo    *sim.Demo
+	cloud   *sim.Cloud
+	gateway *sim.Device
 }
 
 // run serves until ctx ends. ready, when not nil, receives what runs once
@@ -60,6 +61,8 @@ func run(ctx context.Context, args []string, out io.Writer, ready func(running))
 	fs.SetOutput(out)
 	withCloud := fs.Bool("cloud", false, "also serve a simulated Mi account listing the devices")
 	password := fs.String("password", "demo-mi-password", "password of the simulated Mi account")
+	withGateway := fs.Bool("gateway", false, "also serve a lumi.gateway.v3 gateway with a weather and a door sensor")
+	verify := fs.Bool("verify", false, "the simulated Mi account asks for a code at sign-in (the code is printed)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -82,10 +85,31 @@ func run(ctx context.Context, args []string, out io.Writer, ready func(running))
 		host, _, _ := net.SplitHostPort(x.dev.Addr())
 		list = append(list, miio.CloudDevice{DID: strconv.FormatUint(uint64(x.dev.ID), 10), Token: x.token, Name: x.name, Model: x.dev.Model, LocalIP: host, Online: true})
 	}
+	if *withGateway {
+		gw, err := sim.Start(0x0a1b2c04, sim.GatewayToken, "lumi.gateway.v3", map[string]any{})
+		if err != nil {
+			return err
+		}
+		defer gw.Close()
+		gw.Configure(func(g *sim.Device) { g.SubDevices = sim.DemoSubDevices() })
+		r.gateway = gw
+		did := strconv.FormatUint(uint64(gw.ID), 10)
+		fmt.Fprintf(out, "miiosim: %-8s %-22s did %d on udp %s token %s\n", "gateway", gw.Model, gw.ID, gw.Addr(), sim.GatewayToken)
+		host, _, _ := net.SplitHostPort(gw.Addr())
+		list = append(list, miio.CloudDevice{DID: did, Token: sim.GatewayToken, Name: "gateway", Model: gw.Model, LocalIP: host, Online: true})
+		for _, s := range sim.DemoSubDevices() {
+			fmt.Fprintf(out, "miiosim:   sub-device %s %s\n", s.SID, s.Model)
+			list = append(list, miio.CloudDevice{DID: s.SID, Name: s.Model, Model: s.Model, Online: true, ParentID: did, ParentModel: gw.Model})
+		}
+	}
 	if *withCloud {
 		r.cloud = sim.StartCloud(demoUser, *password, map[string][]miio.CloudDevice{"i2": list})
 		defer r.cloud.Close()
 		fmt.Fprintf(out, "miiosim: Mi account %s at %s (API %s)\n", demoUser, r.cloud.HTTP.URL, r.cloud.APIBase("i2"))
+		if *verify {
+			r.cloud.Verify = true
+			fmt.Fprintf(out, "miiosim: the account asks for a code at sign-in; the code is 246810\n")
+		}
 	}
 	if ready != nil {
 		ready(r)

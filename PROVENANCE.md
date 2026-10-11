@@ -19,14 +19,30 @@ On 2026-10-11 python-miio's client was run against the simulators
 `StartAt` was added to serve a device on a given address; no simulator
 behaviour had to change.
 
+v0.2.0 (2026-10-11): sim/gateway.go (gateway sub-devices and the legacy
+Roborock methods), sim/ota.go, sim/push.go, sim/verify.go and
+sim/cloudrpc.go were written for this module from the facts the miio
+module's v0.2.0 uses (its PROVENANCE.md lists them; python-miio at
+9a00e08 read for behaviour only, token_extractor.py for the
+verification steps). The demo sub-devices' sids are made up; their
+zigbee models and type numbers are real ones so clients map them. The
+interop runs moved to python:3.12.10-slim and were repeated, and
+python-miio's Gateway, firmware update, RoborockVacuum, ChuangmiPlug and
+PushServer and micloud 0.6 were added as peers. The micloud run changed
+the simulated account: it now reads parameters from a form body as well
+as the query, answers "result": "ok" at sign-in, and serves the older
+home/device_list.
+
 ## Sources
 
 | Area (files) | Followed |
 |---|---|
 | Devices (sim/sim.go, sim/miot.go) | the miio module's packets; method sets and error answers of the legacy models from python-miio's descriptions (facts only); MIoT codes -4002, -4003, -4005 |
 | Mi account and specification service (sim/cloud.go) | Xiaomi-cloud-tokens-extractor's steps (MIT, facts only); miot-spec.org's format |
+| Gateways, vacuums, firmware update, pushes (sim/gateway.go, sim/ota.go, sim/push.go) | python-miio's descriptions of the gateway sub-device methods, the Roborock methods and state codes, miIO.ota and its states, the push scene (facts only); the timing, the real download and MD5 check, and `Emit` are our own design |
+| Account verification and device control (sim/verify.go, sim/cloudrpc.go) | token_extractor.py's identity-check and captcha steps (MIT, facts only); the device-control paths as open-source Mi account clients use them; the context check, demo code and captcha image are our own |
 | Command (cmd/miiosim) | none (flags are our own) |
-| Interop peer (interop/peer/client.py) | our own script calling python-miio at a fixed commit, installed at test time |
+| Interop peer (interop/peer/client.py) | our own script calling python-miio at a fixed commit and micloud, installed at test time |
 
 No specification or vendor text is reproduced.
 
@@ -35,6 +51,6 @@ No specification or vendor text is reproduced.
 | Test | Source |
 |---|---|
 | client_test.go, example_test.go, sim/, cmd/miiosim | the miio client against these simulators, written from the same descriptions; not a real device, account or specification service |
-| interop/ | python-miio's client against these simulators |
+| interop/ | python-miio's client and micloud against these simulators |
 
 All tokens, device IDs, accounts and addresses are made-up demo values.

@@ -17,7 +17,7 @@ import (
 )
 
 // image is the reference peer's image, built from ./peer.
-const image = "sigma-miio-sim-interop:python-miio-9a00e08"
+const image = "sigma-miio-sim-interop:python-miio-9a00e08-py3.12.10-r3"
 
 // envVar turns the tests on.
 const envVar = "SIGMA_MIIO_INTEROP"

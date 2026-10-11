@@ -1,16 +1,19 @@
 // Package sim simulates Xiaomi devices and services for tests and demos:
 // miIO devices on loopback UDP (the hello handshake, checksummed encrypted
-// packets, miIO.info, get_prop and the set_* methods of plugs, lights and
-// air purifiers, and the MIoT get_properties, set_properties and action
-// requests), the Mi account (Cloud: sign-in and the device list with
-// tokens), and a MIoT specification service (SpecServer). Built from the
-// protocol facts in the parent package; not a Xiaomi product.
+// packets, miIO.info, get_prop and the set_* methods of plugs, lights,
+// air purifiers and Roborock vacuums, and the MIoT get_properties,
+// set_properties and action requests; gateway sub-devices, firmware
+// update and push scenes), the Mi account (Cloud: sign-in with its
+// captcha and identity check, the device list with tokens, device
+// control), and a MIoT specification service (SpecServer). Built from the
+// protocol facts in the miio module; not a Xiaomi product.
 package sim
 
 import (
 	"encoding/hex"
 	"encoding/json"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -39,11 +42,27 @@ type Device struct {
 	// Actions run by "siid.aiid".
 	Actions map[string]func(d *Device)
 
-	mu    sync.Mutex
-	seen  map[int]bool
-	conn  *net.UDPConn
-	start time.Time
-	calls []string
+	// SubDevices are a gateway's Zigbee sub-devices (gateway.go).
+	SubDevices []*SubDevice
+	// Firmware is the version miIO.info reports ("2.1.9_0023" when
+	// empty); a firmware update installs OTAVersion ("2.1.10_0001" when
+	// empty). OTAStep is how long each update phase takes (50 ms when 0);
+	// HTTP fetches the image (http.DefaultClient when nil).
+	Firmware, OTAVersion string
+	OTAStep              time.Duration
+	HTTP                 *http.Client
+	// PushTo sends every push to this host:port instead of the scene
+	// target's address on port 54321 (push.go).
+	PushTo string
+
+	mu          sync.Mutex
+	seen        map[int]bool
+	conn        *net.UDPConn
+	start       time.Time
+	calls       []string
+	otaState    string
+	otaProgress int
+	scenes      []scene
 }
 
 // Start serves a device on 127.0.0.1, on a free port.
@@ -190,9 +209,19 @@ func (d *Device) handle(method string, p []any) any {
 			return nil
 		}
 		return d.miot(method, p)
+	case "miIO.ota", "miIO.get_ota_progress", "miIO.get_ota_state":
+		return d.ota(method, p)
+	case "send_data_frame", "miIO.xdel":
+		return d.scene(method, p)
 	}
 	if d.MIoTOnly && method != "miIO.info" {
 		return nil
+	}
+	if res, handled := d.gateway(method, p); handled {
+		return res
+	}
+	if res, handled := d.vacuum(method); handled {
+		return res
 	}
 	m := d.Model
 	yeelight := strings.HasPrefix(m, "yeelink.light.")
@@ -233,7 +262,11 @@ func (d *Device) handle(method string, p []any) any {
 	}
 	switch method {
 	case "miIO.info":
-		return map[string]any{"model": d.Model, "fw_ver": "2.1.9_0023", "hw_ver": "esp32", "mac": "78:11:DC:00:00:01", "token": "hidden"}
+		fw := d.Firmware
+		if fw == "" {
+			fw = "2.1.9_0023"
+		}
+		return map[string]any{"model": d.Model, "fw_ver": fw, "hw_ver": "esp32", "mac": "78:11:DC:00:00:01", "token": "hidden"}
 	case "get_prop":
 		out := make([]any, len(p))
 		for i, k := range p {

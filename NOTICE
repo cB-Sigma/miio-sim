@@ -8,7 +8,7 @@ descriptions of the protocols (PROVENANCE.md). It contains no code from
 other projects. sim/sim.go, sim/cloud.go and sim/miot.go come from
 SigmaM2M and carry no per-file copyright header, the convention of the
 code they come from; the copyright line above covers them. Files added
-for this module carry "Copyright 2026 Abhinav Gautam" and
+for this module, including every file added in v0.2.0, carry "Copyright 2026 Abhinav Gautam" and
 "SPDX-License-Identifier: Apache-2.0".
 
 Trademarks
@@ -23,12 +23,18 @@ Facts from other projects
 -------------------------
 
 - python-miio (github.com/rytilahti/python-miio, GPL-3.0): the miIO
-  packet and the method sets of the legacy models the simulator answers
-  (facts only; no code was taken).
+  packet and the method sets of the legacy models the simulator answers;
+  from v0.2.0 also the Roborock vacuum methods, the lumi gateway
+  sub-device methods, the firmware update request and states, and the
+  push scene layout (facts only; no code was taken).
 - Xiaomi-cloud-tokens-extractor
   (github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor; MIT,
   Copyright (c) 2020 Piotr Machowski): the Mi account endpoints the
-  simulated account answers (facts only).
+  simulated account answers, from v0.2.0 with the captcha and
+  identity-check steps (facts only).
+- micloud (github.com/squachen/micloud; MIT, Copyright (c) 2020 Sammy
+  Svensson): that sign-in may come as a form body and expects "result":
+  "ok", and the older home/device_list (facts only, from running it).
 - The Yeelight Inter-Operation Specification: that a Yeelight refuses
   changes while off.
 - miot-spec.org: the format the simulated specification service serves.
@@ -37,10 +43,11 @@ Interop tests (interop/, a separate test-only module)
 -----------------------------------------------------
 
 interop/peer/Dockerfile downloads python-miio (GPL-3.0) at a fixed
-commit and installs it, with its dependencies, into a python:3.12-slim
-image at test time, to run its client; nothing of python-miio is copied
-into this repository, and it is not linked with this module.
-interop/peer/client.py is our own script that calls python-miio.
+commit and installs it, with its dependencies (micloud among them, MIT),
+into a python:3.12.10-slim image at test time, to run its client;
+nothing of python-miio or micloud is copied into this repository, and
+neither is linked with this module. interop/peer/client.py is our own
+script that calls them.
 
 Dependencies
 ------------

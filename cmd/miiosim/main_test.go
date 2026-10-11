@@ -53,6 +53,56 @@ func TestRunner(t *testing.T) {
 	}
 }
 
+// -gateway serves a gateway with two sub-devices, which the account lists
+// under it; -verify makes the account ask for the printed code.
+func TestRunnerGatewayVerify(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got := make(chan running, 1)
+	var out bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, []string{"-cloud", "-gateway", "-verify", "-password", "pw"}, &out, func(r running) { got <- r })
+	}()
+	var r running
+	select {
+	case r = <-got:
+	case err := <-done:
+		t.Fatal(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("not ready")
+	}
+	c := &miio.Cloud{Username: demoUser, Password: "pw", AccountBase: r.cloud.HTTP.URL, APIBase: r.cloud.APIBase, HTTP: r.cloud.HTTP.Client()}
+	if err := c.Login(ctx); err == nil {
+		t.Fatal("no verification asked")
+	}
+	if err := c.SendCode(ctx, miio.ByEmail); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.VerifyCode(ctx, miio.ByEmail, "246810"); err != nil {
+		t.Fatal(err)
+	}
+	devs, err := c.Devices(ctx, []string{"i2"})
+	gwDID := ""
+	for _, d := range devs {
+		if d.Model == "lumi.gateway.v3" {
+			gwDID = d.DID
+		}
+	}
+	if err != nil || len(devs) != 6 || len(miio.GatewaySubDevices(devs, gwDID)) != 2 {
+		t.Fatalf("account devices %v %v", devs, err)
+	}
+	tok, _ := hex.DecodeString("a0b1c2d3e4f5061728394a5b6c7d8e9f")
+	g := &miio.Gateway{Client: &miio.Client{Addr: r.gateway.Addr(), Token: tok, Timeout: 2 * time.Second}, Model: "lumi.gateway.v3"}
+	if subs, err := g.SubDevices(ctx); err != nil || len(subs) != 2 {
+		t.Errorf("sub-devices %v %v", subs, err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunnerFlags(t *testing.T) {
 	for _, args := range [][]string{{"-bogus"}, {"extra"}} {
 		if err := run(context.Background(), args, &bytes.Buffer{}, nil); err == nil {
