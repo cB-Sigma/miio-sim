@@ -26,14 +26,18 @@ platform; it has no dependency on it.
 | Model behaviour: a Yeelight refuses changes while off; Philips lights take one argument per method and set_cct; chuangmi.plug.v1 switches with set_on/set_off; MIoT-only models refuse legacy methods | yes |
 | MIoT get_properties, set_properties (codes -4002 read-only, -4003 unknown, -4005 wrong type), actions | yes |
 | Devices that drop a request ID they already answered (`DropSeenIDs`) | yes |
-| Roborock vacuums (roborock.vacuum.*, rockrobo.vacuum.*): app_start, app_stop, app_pause, app_charge, get_status | yes |
+| Roborock vacuums (roborock.vacuum.*, rockrobo.vacuum.*): app_start, app_stop, app_pause, app_charge, app_spot, get_status | yes |
+| Roborock extras (`Device.Vacuum`): consumables and their reset, clean summary and records (list or object answers), do-not-disturb, timers, time zone, sound volume, custom mode, carpet mode, find_me | yes |
+| Roborock maps, rooms, zones, mop and dock methods | no |
+| Wi-Fi setup (miIO.config_router, kept in `Device.WiFi`) | yes |
+| mDNS names (`MDNSInstance`) and a `Browser` listing simulated devices for miio's `DiscoverMDNS` | yes; nothing is announced on the network |
 | lumi gateways and their Zigbee sub-devices (`SubDevices`): device_list (older gateways), get_device_list (lumi.gateway.mgl03), get_device_prop, get_device_prop_exp, set_device_prop, get_battery, remove_device | yes |
 | Firmware update: miIO.ota downloads the image from its URL and checks the MD5, then miIO.get_ota_progress and miIO.get_ota_state follow it to the new `OTAVersion` or "failed" | yes |
 | Pushes: send_data_frame scenes, miIO.xdel, `Emit` sending the event to the scene's target and waiting for its answer (`PushTo` for a test listener) | yes |
 | Mi account sign-in, homes and device lists per region (and the older home/device_list), form or query parameters, a session that ends | yes |
 | Mi account captcha (`Captcha`) and identity check by e-mail or SMS (`Verify`), completed with the demo text and code | yes |
 | Device control through the account for linked devices (`Link`): miotspec/prop/get, prop/set, action, home/rpc | yes |
-| MIoT specification service (`StartSpecServer`) | yes |
+| MIoT specification service (`StartSpecServer`): index (released, or all with statuses), specifications, translations (`SetTranslations`), an outage (`SetDown`) for testing miio's `SpecMirror` | yes |
 | Bluetooth sub-devices of gateways | no: no local method is known to simulate; a Bluetooth device's readings can be served through `Link` and the account |
 
 ## Install
@@ -60,6 +64,8 @@ miiosim -cloud
 | `-password` | `demo-mi-password` | password of the simulated account |
 | `-gateway` | off | also serve a lumi.gateway.v3 gateway with a weather sensor and a door sensor (listed under it in the account) |
 | `-verify` | off | the account asks for a code at sign-in; the code is printed |
+| `-vacuum` | off | also serve a roborock.vacuum.s5 vacuum on the legacy methods, with the extras |
+| `-specs` | none | also serve this MIoT specification mirror directory (as miio's `miiospec` fills it), offline |
 
 It serves a chuangmi.plug.m3 plug and a yeelink.light.color1 bulb on the
 legacy methods and a zhimi.airpurifier.ma4 purifier on MIoT only, each on
@@ -94,8 +100,8 @@ Reference: https://pkg.go.dev/github.com/cB-Sigma/miio-sim
 
 | Package | What it does |
 |---|---|
-| `sim` | `Start`, `StartAt`, `Device` (`Prop`, `MIoTValue`, `Calls`, `Configure` for `DropSeenIDs`, `MIoTOnly`, `MIoT`, `ReadOnly`, `Actions`, `SubDevices`, `Firmware`, `OTAVersion`, `OTAStep`, `HTTP`, `PushTo`; `SubProp`, `FirmwareVersion`, `Scenes`, `Emit`), `SubDevice`, `DemoSubDevices`, `NewDemo`; `StartCloud` (`Cloud`: `APIBase`, `Logins`, `EndSession`, `Verify`, `Captcha`, `Code`, `CaptchaText`, `CodesSent`, `Verified`, `Link`); `StartSpecServer` |
-| `cmd/miiosim` | Serves three demo devices and, with `-gateway`, a gateway with two sub-devices; with `-cloud`, an account listing them |
+| `sim` | `Start`, `StartAt`, `Device` (`Prop`, `MIoTValue`, `Calls`, `Configure` for `DropSeenIDs`, `MIoTOnly`, `MIoT`, `ReadOnly`, `Actions`, `SubDevices`, `Firmware`, `OTAVersion`, `OTAStep`, `HTTP`, `PushTo`, `Vacuum`, `WiFi`; `SubProp`, `FirmwareVersion`, `Scenes`, `Emit`, `MDNSInstance`), `VacuumState`, `NewVacuumState`, `VacuumRecord`, `VacuumTimer`, `Browser`, `SubDevice`, `DemoSubDevices`, `NewDemo`; `StartCloud` (`Cloud`: `APIBase`, `Logins`, `EndSession`, `Verify`, `Captcha`, `Code`, `CaptchaText`, `CodesSent`, `Verified`, `Link`); `StartSpecServer` (`SetTranslations`, `SetDown`) |
+| `cmd/miiosim` | Serves three demo devices and, with `-gateway`, a gateway with two sub-devices, with `-vacuum` a Roborock vacuum; with `-cloud`, an account listing them; with `-specs`, a specification mirror |
 | `interop` (nested module, tests only) | python-miio's client and micloud against the simulators, in a container |
 
 Changes per version are in [CHANGELOG.md](CHANGELOG.md).
@@ -110,12 +116,33 @@ cd interop && SIGMA_MIIO_INTEROP=1 go test -v ./...   # needs Docker
 The tests at the module root drive the miio client against the
 simulators: the legacy client and discovery, MIoT, the specification
 mapping and family helpers, gateways, firmware update, pushes, the
-account with its verification steps and device control, and the
-specification service. Tests carry `// Covers: SIG-...` comments:
-requirement IDs of the SigmaM2M project's compliance report, with no
-meaning outside it; the gateway, firmware and push tests claim none.
+account with its verification steps and device control, the
+specification service and a specification mirror filled from it, the
+vacuum extras, mDNS discovery, Wi-Fi setup and the MIoT probe
+(v03_test.go). Tests carry `// Covers: SIG-...` comments: requirement
+IDs of the SigmaM2M project's compliance report, with no meaning
+outside it; the gateway, firmware, push and v0.3.0 tests claim none.
 
 ### Interop tested against
+
+v0.3.0: python-miio master 9a00e08 (0.6.0.dev0) with micloud 0.6, on
+python:3.12.10-slim, Docker Desktop on arm64, 2026-10-12 (`interop`; all
+eight tests passed, the seven earlier ones repeated):
+
+- python-miio's `RoborockVacuum` against the simulated vacuum with
+  `NewVacuumState`: consumable_status, consumable_reset, clean_history
+  and clean_details, dnd_status, set_dnd, disable_dnd, add_timer,
+  update_timer, timer (which reads the time zone), delete_timer,
+  sound_volume, set_sound_volume, fan_speed, set_fan_speed,
+  carpet_mode, set_carpet_mode and find all read or changed what the
+  simulator holds; python-miio's supports_miot said no for the legacy
+  vacuum, and configure_wifi reached miIO.config_router with ssid,
+  passwd and uid.
+- The specification mirror is checked against python-miio's own client
+  in the miio module's `interop`; here it runs against the simulated
+  service (module root tests).
+
+Earlier runs:
 
 All on python:3.12.10-slim with python-miio master 9a00e08 (installs as
 0.6.0.dev0) and the micloud 0.6 it depends on, Docker Desktop on arm64,

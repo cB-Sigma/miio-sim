@@ -103,6 +103,43 @@ func TestRunnerGatewayVerify(t *testing.T) {
 	}
 }
 
+// -vacuum serves a Roborock vacuum with its extras; -specs serves a
+// mirror directory.
+func TestRunnerVacuumSpecs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	urn := "urn:miot-spec-v2:device:outlet:0000A002:demo-plug:1"
+	if err := (&miio.SpecMirror{Dir: dir}).Add("demo.plug.v1", 1, []byte(`{"type":"`+urn+`","services":[{"iid":2,"type":"urn:miot-spec-v2:service:switch:0000780C:demo-plug:1"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan running, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, []string{"-vacuum", "-specs", dir}, &bytes.Buffer{}, func(r running) { got <- r })
+	}()
+	var r running
+	select {
+	case r = <-got:
+	case err := <-done:
+		t.Fatal(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("not ready")
+	}
+	tok, _ := hex.DecodeString(vacuumToken)
+	v := &miio.Vacuum{Family: miio.Family{Client: &miio.Client{Addr: r.vacuum.Addr(), Token: tok, Timeout: 2 * time.Second}}}
+	if c, err := v.Consumables(ctx); err != nil || c.MainBrush == 0 {
+		t.Errorf("consumables %+v %v", c, err)
+	}
+	if sp, err := (&miio.HTTPSpecs{Base: r.specs}).Spec(ctx, "demo.plug.v1"); err != nil || sp.Type != urn {
+		t.Errorf("mirror %+v %v", sp, err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunnerFlags(t *testing.T) {
 	for _, args := range [][]string{{"-bogus"}, {"extra"}} {
 		if err := run(context.Background(), args, &bytes.Buffer{}, nil); err == nil {

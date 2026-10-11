@@ -8,7 +8,7 @@ descriptions of the protocols (PROVENANCE.md). It contains no code from
 other projects. sim/sim.go, sim/cloud.go and sim/miot.go come from
 SigmaM2M and carry no per-file copyright header, the convention of the
 code they come from; the copyright line above covers them. Files added
-for this module, including every file added in v0.2.0, carry "Copyright 2026 Abhinav Gautam" and
+for this module, including every file added in v0.2.0 and v0.3.0, carry "Copyright 2026 Abhinav Gautam" and
 "SPDX-License-Identifier: Apache-2.0".
 
 Trademarks
@@ -26,7 +26,13 @@ Facts from other projects
   packet and the method sets of the legacy models the simulator answers;
   from v0.2.0 also the Roborock vacuum methods, the lumi gateway
   sub-device methods, the firmware update request and states, and the
-  push scene layout (facts only; no code was taken).
+  push scene layout; from v0.3.0 also the Roborock legacy extras
+  (consumables, cleaning history, do-not-disturb, timers, sound, custom
+  and carpet mode), miIO.config_router and the mDNS instance name (facts
+  only; no code or data was taken).
+- hass-xiaomi-miot (github.com/al-one/hass-xiaomi-miot, Apache-2.0),
+  from v0.3.0: the translations path of the specification service and
+  its answer's shape (facts only).
 - Xiaomi-cloud-tokens-extractor
   (github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor; MIT,
   Copyright (c) 2020 Piotr Machowski): the Mi account endpoints the

@@ -8,7 +8,7 @@
 #   python client.py wrongtoken <host> <port>
 #   python client.py gateway <host> <port> <token hex> <sub-device sid>
 #   python client.py ota <host> <port> <token hex> <url> <md5>
-#   python client.py vacuum|plug <host> <port> <token hex>
+#   python client.py vacuum|vacuum_more|plug <host> <port> <token hex>
 #   python client.py push <host> <port> <token hex> <sub-device sid>
 #     (subscribes, then waits for a line on stdin before unsubscribing)
 #   python client.py micloud <account base URL> <user> <password> <did>
@@ -100,6 +100,43 @@ def vacuum(host, port, token):
     st = v.status()
     say("status", {"state": st.state_code, "battery": st.battery})
     say("home", v.home())
+    say("done")
+
+
+def vacuum_more(host, port, token):
+    """python-miio's Roborock extras: consumables and their reset, the
+    history and a record, do-not-disturb, timers, volume, fan speed,
+    carpet mode, find; then Wi-Fi setup and the MIoT probe."""
+    from miio.integrations.roborock.vacuum.vacuum_enums import Consumable, TimerState
+
+    v = RoborockVacuum(host, token, model="roborock.vacuum.s5", timeout=3)
+    v._protocol.port = int(port)
+    c = v.consumable_status()
+    say("consumables", {"main": c.main_brush.total_seconds(), "filter": c.filter.total_seconds(), "sensor": c.sensor_dirty.total_seconds()})
+    say("reset", v.consumable_reset(Consumable.Filter))
+    say("consumables2", {"filter": v.consumable_status().filter.total_seconds()})
+    h = v.clean_history()
+    say("history", {"count": h.count, "seconds": h.total_duration.total_seconds(), "area": h.total_area, "ids": h.ids})
+    d = v.clean_details(h.ids[0])
+    say("record", {"start": d.start.timestamp(), "seconds": d.duration.total_seconds(), "area": d.area, "complete": d.complete})
+    dnd = v.dnd_status()
+    say("dnd", {"enabled": dnd.enabled, "start": str(dnd.start), "end": str(dnd.end)})
+    say("set_dnd", v.set_dnd(23, 30, 6, 15))
+    say("disable_dnd", v.disable_dnd())
+    say("add_timer", v.add_timer("0 18 * * 6", "", "", "1770000000000"))
+    say("update_timer", v.update_timer("1770000000000", TimerState.Off))
+    say("timers", [{"id": t.id, "enabled": t.enabled, "cron": t.cron} for t in v.timer()])
+    say("delete_timer", v.delete_timer("1770000000000"))
+    say("volume", v.sound_volume())
+    say("set_volume", v.set_sound_volume(35))
+    say("fan", v.fan_speed())
+    say("set_fan", v.set_fan_speed(102))
+    cm = v.carpet_mode()
+    say("carpet", {"enabled": cm.enabled, "high": cm.current_high})
+    say("set_carpet", v.set_carpet_mode(False))
+    say("find", v.find())
+    say("miot", v.supports_miot())
+    say("wifi", v.configure_wifi("site-net", "demo-wifi-pass", 1234))
     say("done")
 
 
@@ -199,6 +236,8 @@ elif kind == "ota":
     ota(*sys.argv[2:7])
 elif kind == "vacuum":
     vacuum(*sys.argv[2:5])
+elif kind == "vacuum_more":
+    vacuum_more(*sys.argv[2:5])
 elif kind == "plug":
     plug(*sys.argv[2:5])
 elif kind == "push":

@@ -12,7 +12,9 @@
 // addresses); the tokens are demo values printed at start. With -cloud it
 // also serves a simulated Mi account (user demo@example.invalid, password
 // -password) that lists the three devices with their tokens in region
-// i2. For example:
+// i2. -vacuum adds a Roborock vacuum on the legacy methods, and -specs
+// serves a MIoT specification mirror directory (as miio's miiospec fills
+// it) on 127.0.0.1. For example:
 //
 //	miiosim -cloud
 package main
@@ -24,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http/httptest"
 	"os"
 	"os/signal"
 	"strconv"
@@ -52,7 +55,12 @@ type running struct {
 	demo    *sim.Demo
 	cloud   *sim.Cloud
 	gateway *sim.Device
+	vacuum  *sim.Device
+	specs   string // the specification mirror's base URL
 }
+
+// vacuumToken is the demo vacuum's token.
+const vacuumToken = "5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d"
 
 // run serves until ctx ends. ready, when not nil, receives what runs once
 // it listens.
@@ -63,6 +71,8 @@ func run(ctx context.Context, args []string, out io.Writer, ready func(running))
 	password := fs.String("password", "demo-mi-password", "password of the simulated Mi account")
 	withGateway := fs.Bool("gateway", false, "also serve a lumi.gateway.v3 gateway with a weather and a door sensor")
 	verify := fs.Bool("verify", false, "the simulated Mi account asks for a code at sign-in (the code is printed)")
+	withVacuum := fs.Bool("vacuum", false, "also serve a roborock.vacuum.s5 vacuum on the legacy methods")
+	specs := fs.String("specs", "", "also serve the MIoT specification mirror in this directory (filled with miio's miiospec), offline")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -101,6 +111,23 @@ func run(ctx context.Context, args []string, out io.Writer, ready func(running))
 			fmt.Fprintf(out, "miiosim:   sub-device %s %s\n", s.SID, s.Model)
 			list = append(list, miio.CloudDevice{DID: s.SID, Name: s.Model, Model: s.Model, Online: true, ParentID: did, ParentModel: gw.Model})
 		}
+	}
+	if *withVacuum {
+		v, err := sim.Start(0x0a1b2c05, vacuumToken, "roborock.vacuum.s5", map[string]any{"state": 8.0, "battery": 100.0})
+		if err != nil {
+			return err
+		}
+		defer v.Close()
+		r.vacuum = v
+		fmt.Fprintf(out, "miiosim: %-8s %-22s did %d on udp %s token %s\n", "vacuum", v.Model, v.ID, v.Addr(), vacuumToken)
+		host, _, _ := net.SplitHostPort(v.Addr())
+		list = append(list, miio.CloudDevice{DID: strconv.FormatUint(uint64(v.ID), 10), Token: vacuumToken, Name: "vacuum", Model: v.Model, LocalIP: host, Online: true})
+	}
+	if *specs != "" {
+		srv := httptest.NewServer((&miio.SpecMirror{Dir: *specs}).Handler())
+		defer srv.Close()
+		r.specs = srv.URL + "/miot-spec-v2"
+		fmt.Fprintf(out, "miiosim: MIoT specifications from %s at %s\n", *specs, r.specs)
 	}
 	if *withCloud {
 		r.cloud = sim.StartCloud(demoUser, *password, map[string][]miio.CloudDevice{"i2": list})

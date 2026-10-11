@@ -200,27 +200,39 @@ func (c *Cloud) api(w http.ResponseWriter, r *http.Request) {
 }
 
 // SpecServer serves MIoT specifications as miot-spec.org does:
-// /instances?status=released lists models with their type URNs, and
-// /instance?type=<URN> gives one.
+// /instances?status=released lists models with their type URNs (with
+// status=all each entry also carries its status), /instance?type=<URN>
+// gives one, and /instance/v2/multiLanguage?urn=<URN> its translations.
 type SpecServer struct {
 	HTTP  *httptest.Server
 	mu    sync.Mutex
 	specs map[string]miio.Spec
+	texts map[string]miio.Translations
 	hits  int
+	down  bool
 }
 
 // StartSpecServer serves the specifications by model.
 func StartSpecServer(specs map[string]miio.Spec) *SpecServer {
-	s := &SpecServer{specs: specs}
+	s := &SpecServer{specs: specs, texts: map[string]miio.Translations{}}
 	s.HTTP = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.hits++
+		if s.down {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		switch r.URL.Path {
 		case "/miot-spec-v2/instances":
-			var ins []any
+			all := r.URL.Query().Get("status") == "all"
+			ins := []any{}
 			for m, sp := range s.specs {
-				ins = append(ins, map[string]any{"model": m, "version": 1, "type": sp.Type, "ts": 1600000000})
+				e := map[string]any{"model": m, "version": 1, "type": sp.Type, "ts": 1600000000}
+				if all {
+					e["status"] = "released"
+				}
+				ins = append(ins, e)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"instances": ins})
 		case "/miot-spec-v2/instance":
@@ -231,11 +243,34 @@ func StartSpecServer(specs map[string]miio.Spec) *SpecServer {
 				}
 			}
 			w.WriteHeader(http.StatusNotFound)
+		case "/instance/v2/multiLanguage":
+			urn := r.URL.Query().Get("urn")
+			if t, ok := s.texts[urn]; ok {
+				_ = json.NewEncoder(w).Encode(map[string]any{"type": urn, "data": t})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	return s
+}
+
+// SetTranslations serves texts as the translations of the specification
+// with this URN.
+func (s *SpecServer) SetTranslations(urn string, texts miio.Translations) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.texts[urn] = texts
+}
+
+// SetDown makes the service answer 503 to everything (down true) or
+// serve again, as an unreachable service would look to a mirror.
+func (s *SpecServer) SetDown(down bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.down = down
 }
 
 // URL is the specification service's base (…/miot-spec-v2).

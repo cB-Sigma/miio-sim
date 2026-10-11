@@ -3,6 +3,33 @@
 All notable changes to this module. Versions follow semantic versioning;
 before v1 the API may change in minor versions.
 
+## v0.3.0 (2026-10-12)
+
+Additions only; v0.2.0 code keeps working. Needs miio v0.3.0.
+
+- Roborock vacuums answer the legacy extras: get_consumable,
+  reset_consumable, get_clean_summary and get_clean_record (in the older
+  list shape, or the newer object shape with
+  `VacuumState.ObjectAnswers`), get_dnd_timer, set_dnd_timer,
+  close_dnd_timer, get_timer, set_timer, upd_timer, del_timer,
+  get_timezone, get_sound_volume, change_sound_volume,
+  test_sound_volume, get_custom_mode, set_custom_mode, get_carpet_mode,
+  set_carpet_mode, find_me and app_spot; their state is
+  `Device.Vacuum` (`VacuumState`, `NewVacuumState`, `VacuumRecord`,
+  `VacuumTimer`).
+- Every device answers miIO.config_router and keeps what it asked for
+  in `Device.WiFi`.
+- mDNS: `Device.MDNSInstance` and `Browser`, a miio.Browser listing
+  simulated devices (nothing is sent on the network).
+- The specification service serves translations
+  (/instance/v2/multiLanguage, `SetTranslations`), answers status=all
+  with each entry's status, and can be made to fail (`SetDown`) to test
+  a mirror offline.
+- `miiosim -vacuum` (a roborock.vacuum.s5) and `-specs <dir>` (serves a
+  specification mirror directory).
+- Interop: python-miio's RoborockVacuum extras, configure_wifi and
+  supports_miot against the simulated vacuum.
+
 ## v0.2.0 (2026-10-11)
 
 Additions only; v0.1.0 code keeps working. Needs miio v0.2.0.

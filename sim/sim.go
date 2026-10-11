@@ -54,6 +54,12 @@ type Device struct {
 	// PushTo sends every push to this host:port instead of the scene
 	// target's address on port 54321 (push.go).
 	PushTo string
+	// Vacuum is a Roborock vacuum's consumables, history, schedule and
+	// settings (vacuum.go); nil: the demo values, set on first use.
+	Vacuum *VacuumState
+	// WiFi is what the last miIO.config_router asked for (ssid, passwd,
+	// uid and any more), nil before.
+	WiFi map[string]any
 
 	mu          sync.Mutex
 	seen        map[int]bool
@@ -213,6 +219,13 @@ func (d *Device) handle(method string, p []any) any {
 		return d.ota(method, p)
 	case "send_data_frame", "miIO.xdel":
 		return d.scene(method, p)
+	case "miIO.config_router":
+		cfg, _ := arg(0).(map[string]any)
+		if cfg == nil || cfg["ssid"] == nil {
+			return devError{-5001, "invalid_arg"}
+		}
+		d.WiFi = cfg
+		return ok
 	}
 	if d.MIoTOnly && method != "miIO.info" {
 		return nil
@@ -220,7 +233,7 @@ func (d *Device) handle(method string, p []any) any {
 	if res, handled := d.gateway(method, p); handled {
 		return res
 	}
-	if res, handled := d.vacuum(method); handled {
+	if res, handled := d.vacuum(method, p); handled {
 		return res
 	}
 	m := d.Model

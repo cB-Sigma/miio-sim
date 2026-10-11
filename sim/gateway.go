@@ -158,9 +158,10 @@ func (d *Device) SubProp(sid, name string) any {
 // vacuum answers the legacy Roborock methods (roborock.vacuum.* and
 // rockrobo.vacuum.* models): app_start, app_stop, app_pause and
 // app_charge change Props["state"] (5 cleaning, 3 idle, 10 paused, 6
-// returning home); get_status answers one object with state and battery.
-// The caller holds d.mu.
-func (d *Device) vacuum(method string) (any, bool) {
+// returning home; app_spot 11 spot cleaning); get_status answers one
+// object with state and battery; the rest are in vacuum.go. The caller
+// holds d.mu.
+func (d *Device) vacuum(method string, p []any) (any, bool) {
 	if !strings.HasPrefix(d.Model, "roborock.vacuum.") && !strings.HasPrefix(d.Model, "rockrobo.vacuum.") {
 		return nil, false
 	}
@@ -174,6 +175,8 @@ func (d *Device) vacuum(method string) (any, bool) {
 		d.Props["state"] = 10.0
 	case "app_charge":
 		d.Props["state"] = 6.0
+	case "app_spot":
+		d.Props["state"] = 11.0
 	case "get_status":
 		st := map[string]any{"msg_ver": 2, "msg_seq": len(d.calls)}
 		for k, v := range d.Props {
@@ -181,7 +184,7 @@ func (d *Device) vacuum(method string) (any, bool) {
 		}
 		return []any{st}, true
 	default:
-		return nil, false
+		return d.vacuumMore(method, p)
 	}
 	return ok, true
 }

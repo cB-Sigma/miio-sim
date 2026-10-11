@@ -33,6 +33,17 @@ the simulated account: it now reads parameters from a form body as well
 as the query, answers "result": "ok" at sign-in, and serves the older
 home/device_list.
 
+v0.3.0 (2026-10-12): sim/vacuum.go and sim/mdns.go were written for
+this module, and the specification service and the command were
+extended, from the facts the miio module's v0.3.0 uses (its
+PROVENANCE.md lists them: python-miio at 9a00e08 read for the Roborock
+method names and answer fields, hass-xiaomi-miot v1.1.5 for the
+translations path). The demo consumable counters, cleaning records,
+timer, volume, fan speed, carpet thresholds and time zone are our own
+made-up values, not python-miio's simulator data. python-miio's
+RoborockVacuum then ran against the simulated vacuum with no
+simulator change needed.
+
 ## Sources
 
 | Area (files) | Followed |
@@ -41,6 +52,8 @@ home/device_list.
 | Mi account and specification service (sim/cloud.go) | Xiaomi-cloud-tokens-extractor's steps (MIT, facts only); miot-spec.org's format |
 | Gateways, vacuums, firmware update, pushes (sim/gateway.go, sim/ota.go, sim/push.go) | python-miio's descriptions of the gateway sub-device methods, the Roborock methods and state codes, miIO.ota and its states, the push scene (facts only); the timing, the real download and MD5 check, and `Emit` are our own design |
 | Account verification and device control (sim/verify.go, sim/cloudrpc.go) | token_extractor.py's identity-check and captcha steps (MIT, facts only); the device-control paths as open-source Mi account clients use them; the context check, demo code and captcha image are our own |
+| Vacuum extras, Wi-Fi setup, mDNS names (sim/vacuum.go, sim/sim.go, sim/mdns.go) | python-miio's descriptions of the Roborock legacy methods and answer shapes, miIO.config_router and the mDNS instance name (facts only); the checks and refusals are our own design |
+| Translations (sim/cloud.go) | hass-xiaomi-miot's description of the multiLanguage path and its "data" member (Apache-2.0, facts only) |
 | Command (cmd/miiosim) | none (flags are our own) |
 | Interop peer (interop/peer/client.py) | our own script calling python-miio at a fixed commit and micloud, installed at test time |
 
