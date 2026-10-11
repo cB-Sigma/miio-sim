@@ -1,0 +1,58 @@
+miio-sim (simulated Xiaomi miIO and MIoT devices, Mi account and specification service, in Go)
+Copyright 2026 Abhinav Gautam
+
+This module is licensed under the Apache License, Version 2.0 (LICENSE).
+
+The code was written for SigmaM2M, a oneM2M platform, from public
+descriptions of the protocols (PROVENANCE.md). It contains no code from
+other projects. sim/sim.go, sim/cloud.go and sim/miot.go come from
+SigmaM2M and carry no per-file copyright header, the convention of the
+code they come from; the copyright line above covers them. Files added
+for this module carry "Copyright 2026 Abhinav Gautam" and
+"SPDX-License-Identifier: Apache-2.0".
+
+Trademarks
+----------
+
+Xiaomi, Mi, Mi Home, MIoT and Yeelight are trademarks of their owners.
+This module is not made, endorsed or supported by them, and is not
+affiliated with them; the names, and the real model names the demo
+devices use, only say which devices and services it simulates.
+
+Facts from other projects
+-------------------------
+
+- python-miio (github.com/rytilahti/python-miio, GPL-3.0): the miIO
+  packet and the method sets of the legacy models the simulator answers
+  (facts only; no code was taken).
+- Xiaomi-cloud-tokens-extractor
+  (github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor; MIT,
+  Copyright (c) 2020 Piotr Machowski): the Mi account endpoints the
+  simulated account answers (facts only).
+- The Yeelight Inter-Operation Specification: that a Yeelight refuses
+  changes while off.
+- miot-spec.org: the format the simulated specification service serves.
+
+Interop tests (interop/, a separate test-only module)
+-----------------------------------------------------
+
+interop/peer/Dockerfile downloads python-miio (GPL-3.0) at a fixed
+commit and installs it, with its dependencies, into a python:3.12-slim
+image at test time, to run its client; nothing of python-miio is copied
+into this repository, and it is not linked with this module.
+interop/peer/client.py is our own script that calls python-miio.
+
+Dependencies
+------------
+
+- github.com/cB-Sigma/miio (Copyright 2026 Abhinav Gautam, Apache-2.0).
+- github.com/cB-Sigma/lanbcast (indirect, through miio; Copyright 2026
+  Abhinav Gautam, Apache-2.0, standard library only).
+- The Go standard library (BSD-3-Clause, Copyright The Go Authors).
+
+Test data
+---------
+
+Every token, device ID, account, password, MAC and address in this
+module is a made-up demo value (the demo account is demo@example.invalid
+or user@example.invalid).
